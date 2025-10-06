@@ -6,6 +6,7 @@ if not getattr(settings, "DATABASE_URL", None):
     raise RuntimeError("DATABASE_URL is missing. Set it in Railway Variables")
 
 engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True, future=True)
+print("RAW DSN ->", repr(getattr(settings, "DATABASE_URL", None)))
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
