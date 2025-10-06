@@ -23,7 +23,7 @@ async def redis_health(r = Depends(get_redis)):
 async def cache_test(r = Depends(get_redis)):
     await r.setex("health:key", 60, "alive")
     val = await r.get("health:key")
-    return {"value": val.decode() if val else None}
+    return {"value": val.encode() if val else None}
 
 @router.post("/seed")
 def seed(db: Session = Depends(get_db)):

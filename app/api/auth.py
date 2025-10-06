@@ -14,7 +14,7 @@ router = APIRouter()
 def signup(payload: SignUpIn, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
-    u = User(email=str(payload.email), hashed_password=hash_password(payload.password))
+    u = User(email=str(payload.email), password_hash=hash_password(payload.password))
     db.add(u); db.commit(); db.refresh(u)
     return u
 
