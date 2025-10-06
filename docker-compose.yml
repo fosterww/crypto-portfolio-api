@@ -1,0 +1,23 @@
+services:
+  api:
+    build: .
+    env_file: .env
+
+    ports: [ "8000:8000" ]
+    depends_on:
+      - db
+    environment:
+      REDIS_URL: ${REDIS_URL}
+    volumes:
+      - ./app:/app/app
+  db:
+    image: postgres:17
+    environment:
+      POSTGRESPASSWORD: postgres
+      POSTGRESUSER: postgres
+      POSTGRESDB: postgres
+    ports: [ "5432:5432" ]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
