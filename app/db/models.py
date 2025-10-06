@@ -25,7 +25,7 @@ class Portfolio(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
 
     user = relationship("User", back_populates="portfolios")
-    position = relationship("Position", back_populates="portfolio", cascade="all, delete-orphan")
+    positions = relationship("Position", back_populates="portfolio", cascade="all, delete-orphan")
 
 class Position(Base):
     __tablename__ = "positions"
