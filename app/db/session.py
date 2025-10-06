@@ -2,7 +2,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from app.core.config import settings
 
-engine = create_engine(settings.DATABASE_URL, echo=False, future=True)
+if not getattr(settings, "DATABASE_URL", None):
+    raise RuntimeError("DATABASE_URL is missing. Set it in Railway Variables")
+
+engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True, future=True)
+
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 class Base(DeclarativeBase):
