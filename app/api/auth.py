@@ -18,10 +18,11 @@ def signup(payload: SignUpIn, db: Session = Depends(get_db)):
     db.add(u); db.commit(); db.refresh(u)
     return u
 
+# app/api/auth.py
 @router.post("/login", response_model=Token)
 def login(email: EmailStr, password: str, db: Session = Depends(get_db)):
     u = db.query(User).filter(User.email == email).first()
     if not u or not verify_password(password, u.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_token({"sub": str(u.id)})
+    token = create_token(u.id)  
     return Token(access_token=token)

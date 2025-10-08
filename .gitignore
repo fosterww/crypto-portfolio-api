@@ -6,3 +6,4 @@ pgdata/
 .idea/
 .vscode/
 alembic.ini
+.pytest_cache/
