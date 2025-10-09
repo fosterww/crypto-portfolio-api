@@ -8,7 +8,7 @@ def _redis():
 
 async def close_redis():
     r = _redis()
-    await r.Close()
+    await r.close()
 
 async def get_redis():
     return _redis()

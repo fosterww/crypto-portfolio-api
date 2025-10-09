@@ -1,17 +1,22 @@
+import os
 import pytest
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
-from app.main import app as fastapi_app
 from app.db.session import Base, get_db
-import app.db.models
+from app.main import app as fastapi_app
 
+
+os.environ.setdefault("DISABLE_REDIS", "1")
+
+TEST_DATABASE_URL = "sqlite+pysqlite:///:memory:"
 engine = create_engine(
-    "sqlite:///:memory:",
+    TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
+    future=True,
 )
+
 TestingSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 Base.metadata.create_all(bind=engine)
@@ -20,26 +25,11 @@ def override_get_db():
     db = TestingSessionLocal()
     try:
         yield db
+        db.commit()
     finally:
         db.close()
 
-@pytest.fixture(autouse=True)
-def override_dependencies():
-    fastapi_app.dependency_overrides[get_db] = override_get_db
-
-    class _FakeRedis:
-        def __init__(self): self._store = {}
-        async def ping(self): return True
-        async def setex(self, key, sec, val): self._store[key] = val
-        async def get(self, key): return self._store.get(key)
-        async def close(self): pass
-
-    from app.core.cache import get_redis
-    async def _fake(): return _FakeRedis()
-    fastapi_app.dependency_overrides[get_redis] = _fake
-
-    yield
-    fastapi_app.dependency_overrides.clear()
+fastapi_app.dependency_overrides[get_db] = override_get_db
 
 @pytest.fixture
 def client():
