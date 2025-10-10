@@ -20,7 +20,7 @@ async def process_alerts(db: Session):
 
     r = await get_redis()
     now = datetime.utcnow()
-    cooldown = settings.ALERT_COOLDAWN_SEC
+    cooldown = settings.ALERT_COOLDOWN_SEC
 
     for a, asset in alerts:
         price = Decimal(str(prices.get(asset.symbol, 0.0)))

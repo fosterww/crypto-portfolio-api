@@ -20,7 +20,7 @@ def create_alert(payload: AlertCreateIn,
         user_id=user.id,
         asset_id=payload.asset_id,
         direction=payload.direction,
-        treshold_price=payload.threshold_price,
+        threshold_price=payload.threshold_price,
         channel=payload.channel,
         is_active=payload.is_active,
     )
