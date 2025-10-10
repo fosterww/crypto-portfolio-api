@@ -15,10 +15,10 @@ app.include_router(positions_router, prefix="/positions", tags=["positions"])
 app.include_router(prices_router, prefix="/prices", tags=["prices"])
 app.include_router(alerts_router, prefix="/alerts", tags=["alerts"])
 
-@app.lifespan("startup")
+@app.on_event("startup")
 async def on_startup():
     start_scheduler()
 
-@app.lifespan("shutdown")
+@app.on_event("shutdown")
 async def on_shutdown():
     shutdown_scheduler()
