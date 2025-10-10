@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from sqlalchemy.orm import Session
-from app.db.models import Alert, Asset, User, AlertDirection, AlertChannel
+from app.db.models import Alert, Asset, AlertDirection, AlertChannel
 from app.services.pricing import get_prices_cached
 from app.core.cache import get_redis
 from app.core.config import settings
@@ -11,42 +11,49 @@ def _cooldown_key(user_id: int, alert_id: int) -> str:
     return f"alert:{user_id}:{alert_id}:cooldown"
 
 async def process_alerts(db: Session):
-    alerts = db.query(Alert, Asset).join(Asset, Asset.id == Alert.asset_id).filter(Alert.is_active == True).all()
-    if not alerts:
+    rows = (
+        db.query(Alert, Asset)
+        .join(Asset, Asset.id == Alert.asset_id)
+        .filter(Alert.is_active == True)
+        .all()
+    )
+    if not rows:
         return
-    
-    symbols = sorted({asset.symbol for (_a, asset) in alerts})
-    prices = await get_prices_cached(db, symbols, vs=settings.DEFAULT_VS, ttl=60)
+
+    symbols = {asset.symbol.upper() for _, asset in rows}
+    prices = await get_prices_cached(db, list(symbols), vs=settings.DEFAULT_VS.lower(), ttl=60)
 
     r = await get_redis()
+    cooldown = int(settings.ALERT_COOLDAWN_SEC)
     now = datetime.utcnow()
-    cooldown = settings.ALERT_COOLDOWN_SEC
 
-    for a, asset in alerts:
-        price = Decimal(str(prices.get(asset.symbol, 0.0)))
-        threshold = Decimal(a.threshold_price)
+    for a, asset in rows:
+        sym = asset.symbol.upper()
+        price = prices.get(sym)
+        if price is None:
+            continue
 
-        should_trigger = False
-        if a.direction == AlertDirection.above and price >= threshold:
-            should_trigger = True
-        elif a.direction == AlertDirection.below and price <= threshold:
-            should_trigger = True
+        threshold = float(a.threshold_price) if isinstance(a.threshold_price, Decimal) else float(a.threshold_price)
 
-        if not should_trigger:
+        triggered = (
+            (a.direction == AlertDirection.above and price >= threshold) or
+            (a.direction == AlertDirection.below and price <= threshold)
+        )
+        if not triggered:
             continue
 
         key = _cooldown_key(a.user_id, a.id)
         if await r.get(key):
             continue
 
-        text = f"⚠️ {asset.symbol} price={price} crossed {a.direction} {threshold}"
+        text = f"⚠️ {sym}: price={price} crossed {a.direction} {threshold}"
         ok = False
         if a.channel == AlertChannel.telegram:
             ok = await send_telegram(text)
         elif a.channel == AlertChannel.email:
-            ok = send_email("user@example.com", f"Alert {asset.symbol}", text)
-        
+            ok = send_email("user@example.com", f"Alert {sym}", text)
+
         if ok:
             a.last_triggered_at = now
             db.add(a); db.commit()
-            await r.setex(key, cooldown, b"1")
+            await r.setex(key, cooldown, "1")
