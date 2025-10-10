@@ -22,7 +22,7 @@ class AlertOut(BaseModel):
     user_id: int
     asset_id: int
     direction: AlertDirection
-    threshold_price: str
+    threshold_price: float
     channel: AlertChannel
     is_active: bool
 
