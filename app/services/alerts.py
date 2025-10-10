@@ -24,7 +24,7 @@ async def process_alerts(db: Session):
     prices = await get_prices_cached(db, list(symbols), vs=settings.DEFAULT_VS.lower(), ttl=60)
 
     r = await get_redis()
-    cooldown = int(settings.ALERT_COOLDAWN_SEC)
+    cooldown = int(settings.ALERT_COOLDOWN_SEC)
     now = datetime.utcnow()
 
     for a, asset in rows:
