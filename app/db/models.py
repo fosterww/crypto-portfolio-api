@@ -2,6 +2,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Integer, String, DateTime, ForeignKey, Numeric, UniqueConstraint, Index
 from datetime import datetime
 from app.db.session import Base
+from sqlalchemy import Enum as SAEnum, Boolean
+import enum
 
 class User(Base):
     __tablename__ = "users"
@@ -41,3 +43,23 @@ class Position(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     portfolio = relationship("Portfolio", back_populates="positions")
+
+class AlertDirection(str, enum.Enum):
+    above = "above"
+    below = "below"
+
+class AlertChannel(str, enum.Enum):
+    telegram = "telegram"
+    email = "email"
+
+class Alert(Base):
+    __tablename__ = "alerts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True, nullable=False)
+    direction: Mapped[AlertDirection] = mapped_column(SAEnum(AlertDirection), nullable=False)
+    threshold_price: Mapped[Numeric] = mapped_column(Numeric(18, 6), nullable=False)
+    channel: Mapped[AlertChannel] = mapped_column(SAEnum(AlertChannel), nullable=False, default=AlertChannel.telegram)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
