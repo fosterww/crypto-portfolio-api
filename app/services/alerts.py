@@ -1,11 +1,11 @@
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy.orm import Session
-from app.db.models import Alert, Asset, AlertDirection, AlertChannel
+from app.db.models import Alert, Asset, AlertDirection, AlertChannel, AlertEvent
 from app.services.pricing import get_prices_cached
 from app.core.cache import get_redis
 from app.core.config import settings
-from app.services.notifier import send_telegram, send_email
+from app.services.notifier import send_telegram_global, send_email
 
 def _cooldown_key(user_id: int, alert_id: int) -> str:
     return f"alert:{user_id}:{alert_id}:cooldown"
@@ -36,8 +36,8 @@ async def process_alerts(db: Session):
         threshold = float(alert.threshold_price) if isinstance(alert.threshold_price, Decimal) else float(alert.threshold_price)
 
         triggered = (
-            (alert.direction == AlertDirection.above and price >= threshold) or
-            (alert.direction == AlertDirection.below and price <= threshold)
+            (alert.direction == AlertDirection.above and price > threshold) or
+            (alert.direction == AlertDirection.below and price < threshold)
         )
         if not triggered:
             continue
@@ -46,15 +46,17 @@ async def process_alerts(db: Session):
         if await r.get(key):
             continue
 
-        text = f"⚠️ {sym}: price={price} crossed {alert.direction} {threshold}"
-        ok = False
-        if alert.channel == AlertChannel.telegram:
-            ok = await send_telegram(text)
-        elif alert.channel == AlertChannel.email:
-            ok = send_email("user@example.com", f"Alert {sym}", text)
+        text = f"⚠️ {asset.symbol} price={price} crossed {alert.direction} {threshold}"
+
+        ok = await send_telegram_global(text)
+        if alert.channel == AlertChannel.email:
+            ok = send_email(f"Alert {asset.symbol}", text)
+
+        db.add(AlertEvent(alert_id=alert.id, price=price, message=text))
 
         if ok:
             alert.last_triggered_at = now
-            db.add(alert)
+            db.add(alert); db.commit()
+            await r.setex(key, cooldown_sec, b"1")
+        else:
             db.commit()
-            await r.setex(key, cooldown_sec, "1")

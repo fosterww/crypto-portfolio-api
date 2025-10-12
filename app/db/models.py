@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Integer, String, DateTime, ForeignKey, Numeric, UniqueConstraint, Index
+from sqlalchemy import Integer, String, DateTime, ForeignKey, Numeric, Index, Text
 from datetime import datetime
 from app.db.session import Base
 from sqlalchemy import Enum as SAEnum, Boolean
@@ -63,3 +63,20 @@ class Alert(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    events = relationship(
+        "AlertEvent",
+        back_populates="alert",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+class AlertEvent(Base):
+    __tablename__ = "alert_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    alert_id: Mapped[int] = mapped_column(ForeignKey("alerts.id"), index=True, nullable=False)
+    triggered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    price: Mapped[Numeric] = mapped_column(Numeric(18, 6), nullable=False)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    alert = relationship("Alert", back_populates="events")

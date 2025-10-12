@@ -5,9 +5,9 @@ from app.db.models import Alert, Asset, Portfolio, User
 from app.schemas.alerts import AlertCreateIn, AlertUpdate, AlertOut
 from app.schemas.common import PaginationParams
 from app.core.security import get_current_user
-
 from app.core.cache import get_redis
 from app.services.pricing import get_prices_cached
+from app.core.rate_limit import rate_limit
 
 router = APIRouter()
 
@@ -18,6 +18,7 @@ def _side(price: float, threshold: float) -> str:
 async def create_alert(payload: AlertCreateIn,
                        db: Session = Depends(get_db),
                        user: User = Depends(get_current_user)):
+    await rate_limit(key=f"user:{user.id}:alerts:list", limit=120, window_sec=60)
     asset = db.query(Asset).filter(Asset.id == payload.asset_id).first()
     if not asset:
         raise HTTPException(status_code=400, detail="Asset not found")
@@ -30,7 +31,7 @@ async def create_alert(payload: AlertCreateIn,
         channel=payload.channel,
         is_active=True,
     )
-    db.add(a); db.commit(); db.refresh(a)
+    db.add(a); db.flush(); db.commit(); db.refresh(a)
 
     r = await get_redis()
     sym = asset.symbol.upper()
