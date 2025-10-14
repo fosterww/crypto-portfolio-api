@@ -82,7 +82,7 @@ flowchart LR
 
 ---
 
-## 🚂 Запуск на Ra
+## 🚂 Запуск на Railway
 
 1. 📦 Задеплой репозиторий на Railway (Deploy from GitHub).
 2. Подключи **PostgreSQL** (плагин) → скопируй `DATABASE_URL`.
@@ -139,3 +139,4 @@ password: demo1234
 
 ## 📄 Лицензия
 MIT License — можно использовать как базу для собственных pet-проектов.
+
