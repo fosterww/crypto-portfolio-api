@@ -1,5 +1,5 @@
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from sqlalchemy.orm import Session
 from app.db.models import Alert, Asset, AlertDirection, AlertChannel, AlertEvent
 from app.services.pricing import get_prices_cached
@@ -17,46 +17,71 @@ async def process_alerts(db: Session):
         .filter(Alert.is_active == True)
         .all()
     )
+
     if not rows:
         return
 
-    symbols = sorted({asset.symbol.upper() for _, asset in rows})
-    prices_by_symbol = await get_prices_cached(db, symbols, vs=settings.DEFAULT_VS.lower(), ttl=60)
+    symbols = [asset.symbol for _, asset in rows]
+    prices_map: dict[str, float] = await get_prices_cached(db, symbols)
 
     r = await get_redis()
-    cooldown_sec = int(settings.ALERT_COOLDOWN_SEC)
     now = datetime.utcnow()
 
     for alert, asset in rows:
-        sym = asset.symbol.upper()
-        price = prices_by_symbol.get(sym)
-        if price is None:
+        price_raw = prices_map.get(asset.symbol)
+        if price_raw is None:
             continue
 
-        threshold = float(alert.threshold_price) if isinstance(alert.threshold_price, Decimal) else float(alert.threshold_price)
-
-        triggered = (
-            (alert.direction == AlertDirection.above and price > threshold) or
-            (alert.direction == AlertDirection.below and price < threshold)
-        )
-        if not triggered:
+        try:
+            price = Decimal(str(price_raw))
+        except (InvalidOperation, TypeError):
             continue
 
-        key = _cooldown_key(alert.user_id, alert.id)
-        if await r.get(key):
+        try:
+            threshold = Decimal(str(alert.threshold_price))
+        except (InvalidOperation, TypeError):
             continue
 
-        text = f"⚠️ {asset.symbol} price={price} crossed {alert.direction} {threshold}"
+        cooldown_sec = settings.ALERT_COOLDOWN_SEC or 0
+        key = f"alert:{alert.user_id}:{alert.id}:cooldown"
+        if cooldown_sec > 0:
+            if await r.get(key):
+                continue
 
-        ok = await send_telegram_global(text)
-        if alert.channel == AlertChannel.email:
-            ok = send_email(f"Alert {asset.symbol}", text)
-
-        db.add(AlertEvent(alert_id=alert.id, price=price, message=text))
-
-        if ok:
-            alert.last_triggered_at = now
-            db.add(alert); db.commit()
-            await r.setex(key, cooldown_sec, b"1")
+        if alert.direction == AlertDirection.above:
+            crossed = price >= threshold
+        elif alert.direction == AlertDirection.below:
+            crossed = price <= threshold
         else:
-            db.commit()
+            continue
+
+        prev_side_key = f"alert:{alert.user_id}:{alert.id}:side"
+        prev_side = await r.get(prev_side_key)
+        current_side = b"above" if price >= threshold else b"below"
+
+        if prev_side is None:
+            await r.set(prev_side_key, current_side)
+
+        else:
+            if prev_side == current_side:
+                pass
+            else:
+                crossed = True
+                await r.set(prev_side_key, current_side)
+
+        if crossed:
+            text = f"⚠️ {asset.symbol} price={price} crossed {alert.direction} {threshold}"
+
+            ok = await send_telegram_global(text)
+            if alert.channel == AlertChannel.email:
+                ok = send_email(alert.user.email, f"Alert {asset.symbol}", text)
+
+            db.add(AlertEvent(alert_id=alert.id, price=price, message=text))
+
+            if ok:
+                alert.last_triggered_at = now
+                db.add(alert); db.commit()
+                if cooldown_sec > 0:
+                    await r.setex(key, cooldown_sec, b"1")
+            else:
+                db.commit()
